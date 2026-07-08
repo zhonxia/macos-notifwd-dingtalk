@@ -26,7 +26,25 @@ macOS 的通知中心会将所有通知写入 SQLite 数据库 `~/Library/Group 
 2. 填写机器人名称，配置安全设置（推荐使用**加签**模式）
 3. 复制 Webhook URL 和 Secret
 
-### 2. 运行
+### 2. 一键启动（推荐）
+
+项目内置了可直接双击运行的启动脚本：
+
+- **双击 `start-notifwd.command`** → 自动弹出终端，开始监听转发（静默模式）
+- **双击 `start-notifwd-debug.command`** → 调试模式，显示实时转发日志
+- **双击 `stop-notifwd.command`** → 停止正在运行的程序
+
+首次使用前，在项目目录创建 `.env` 配置文件（已提供 `.env.example` 模板）：
+
+```bash
+cd /path/to/notifwd-dingtalk
+cp .env.example .env
+# 然后编辑 .env 填入你的 Webhook URL 和 Secret
+```
+
+配置好后，以后直接双击 `start-notifwd.command` 就行，关闭终端窗口即停止监听。
+
+### 3. 命令行运行（可选）
 
 ```bash
 # 通过环境变量配置（推荐）
@@ -40,7 +58,7 @@ python3 notifwd.py \
   --secret "SEC..."
 ```
 
-### 3. 权限设置
+### 4. 权限设置
 
 macOS 需要**完整磁盘访问权限 (Full Disk Access)** 才能读取通知中心数据库。
 
@@ -141,10 +159,15 @@ launchctl load ~/Library/LaunchAgents/com.user.notifwd-dingtalk.plist
 ## 文件结构
 
 ```
+```
 notifwd-dingtalk/
-├── notifwd.py        # 主程序（单文件）
-├── requirements.txt  # Python 依赖
-└── README.md         # 本文档
+├── notifwd.py                    # 主程序（单文件）
+├── requirements.txt              # Python 依赖
+├── .env.example                  # 配置模板
+├── start-notifwd.command         # 双击启动（静默模式）
+├── start-notifwd-debug.command   # 双击启动（调试模式）
+├── stop-notifwd.command          # 双击停止
+└── README.md                     # 本文档
 ```
 
 ## 致谢
