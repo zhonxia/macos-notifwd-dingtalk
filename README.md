@@ -1,48 +1,156 @@
 # notifwd — DingTalk Edition
 
-macOS Notification Center → DingTalk robot forwarder.
+> macOS Notification Center → DingTalk 机器人转发器
 
-Based on [notifwd](https://github.com/jrmann100/notifwd) by Jordan Mann.
+将 macOS 桌面通知实时转发到钉钉群聊机器人。基于 [notifwd](https://github.com/jrmann100/notifwd) by Jordan Mann 改造，后端从 Prowl 替换为钉钉 Webhook。
 
-## How it works
+## 工作原理
 
-Periodically checks macOS Notification Center's SQLite database for new notifications, parses them, and forwards to a DingTalk robot via webhook.
+macOS 的通知中心会将所有通知写入 SQLite 数据库 `~/Library/Group Containers/group.com.apple.usernoted/db2/db`。本工具定期轮询该数据库，检测新增通知记录，解析通知内容（标题、副标题、正文、来源 App），通过钉钉机器人 Webhook API 以 Markdown 消息格式转发到指定群聊。
 
-## Prerequisites
+支持 HMAC-SHA256 签名模式（钉钉安全设置中的「加签」方式）。
 
-- Python 3
-- `requests` library (`pip install requests`)
+## 前置条件
 
-## Setup
+- macOS（读取通知中心数据库需要 macOS 特有文件路径）
+- Python 3.6+
+- `pip install requests`
 
-1. Create a DingTalk robot in your group chat, get the Webhook URL (and secret if using signed mode).
+## 快速开始
 
-2. Run:
+### 1. 创建钉钉机器人
+
+在目标钉钉群中创建自定义机器人（Webhook 方式）：
+
+1. 群设置 → 智能群助手 → 添加机器人 → 自定义
+2. 填写机器人名称，配置安全设置（推荐使用**加签**模式）
+3. 复制 Webhook URL 和 Secret
+
+### 2. 运行
 
 ```bash
+# 通过环境变量配置（推荐）
 export DINGTALK_WEBHOOK="https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
-export DINGTALK_SECRET="SEC..."  # optional
-python notifwd.py
+export DINGTALK_SECRET="SEC..."  # 如果启用了加签
+python3 notifwd.py
+
+# 或通过命令行参数
+python3 notifwd.py \
+  --webhook "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" \
+  --secret "SEC..."
 ```
 
-Or pass args directly:
+### 3. 权限设置
+
+macOS 需要**完整磁盘访问权限 (Full Disk Access)** 才能读取通知中心数据库。
+
+- **方式 A**：如果通过终端运行 → 给 **Terminal**（或 iTerm2）授予完整磁盘访问权限
+  - 系统设置 → 隐私与安全性 → 完整磁盘访问权限 → 添加终端应用
+- **方式 B**：如果通过 launchd/开机启动运行 → 给 **Python**（或 `/usr/bin/python3`）授予完整磁盘访问权限
+
+## 命令行选项
+
+| 参数 | 环境变量 | 说明 | 默认值 |
+|------|---------|------|--------|
+| `--webhook -w` | `DINGTALK_WEBHOOK` | 钉钉机器人 Webhook URL | **必填** |
+| `--secret -s` | `DINGTALK_SECRET` | HMAC 加签密钥 | 空（不签名） |
+| `--frequency -f` | — | 轮询间隔（秒） | `5` |
+| `--silent` | — | 静默模式，不输出日志和动画 | `false` |
+| `--test -t` | — | 启动时发送一条测试通知 | `false` |
+| `--version` | — | 显示版本号 | — |
+
+## 使用示例
 
 ```bash
-python notifwd.py --webhook "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN" --secret "SEC..."
+# 基础运行：每 3 秒轮询一次
+python3 notifwd.py --webhook "https://oapi.dingtalk.com/robot/send?access_token=xxx" --frequency 3
+
+# 静默模式运行（适合作为后台服务）
+python3 notifwd.py -w "$DINGTALK_WEBHOOK" -s "$DINGTALK_SECRET" --silent
+
+# 测试模式：启动后触发一条 macOS 通知验证连通性
+python3 notifwd.py -w "$DINGTALK_WEBHOOK" -t
 ```
 
-## Options
+## 作为后台服务运行（launchd）
 
-| Arg | Env var | Description |
-|---|---|---|
-| `--webhook -w` | `DINGTALK_WEBHOOK` | DingTalk robot Webhook URL |
-| `--secret -s` | `DINGTALK_SECRET` | HMAC signing secret (optional) |
-| `--frequency -f` | — | Poll interval in seconds (default: 60) |
-| `--silent` | — | Suppress verbose output and spinner |
-| `--test -t` | — | Trigger a test macOS notification on startup |
-| `--version` | — | Show version |
+可使用 macOS launchd 将其配置为开机自启的后台服务。
 
-## Full Disk Access
+1. 创建 plist 文件 `~/Library/LaunchAgents/com.user.notifwd-dingtalk.plist`：
 
-macOS requires **Full Disk Access** to read the Notification Center database.
-Grant it to the app running this script (Terminal, iTerm2, or Python).
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.notifwd-dingtalk</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/path/to/notifwd.py</string>
+        <string>--silent</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DINGTALK_WEBHOOK</key>
+        <string>https://oapi.dingtalk.com/robot/send?access_token=xxx</string>
+        <key>DINGTALK_SECRET</key>
+        <string>SEC...</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/notifwd-dingtalk.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/notifwd-dingtalk.err</string>
+</dict>
+</plist>
+```
+
+2. 加载服务：
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.user.notifwd-dingtalk.plist
+```
+
+## 消息格式
+
+转发到钉钉的消息格式为 Markdown：
+
+```
+# 应用名称
+### 通知标题
+副标题—正文内容
+```
+
+示例：
+
+```
+# Messages
+### 张三
+今天下午 3 点开会—收到请回复
+```
+
+## 钉钉 API 限频
+
+钉钉自定义机器人有每分钟 20 条的消息频率限制。本工具内置了速率限制器（`_ratelimit`），安全阈值设为每分钟 **18 条**，超出后自动等待，避免被限流。
+
+## 文件结构
+
+```
+notifwd-dingtalk/
+├── notifwd.py        # 主程序（单文件）
+├── requirements.txt  # Python 依赖
+└── README.md         # 本文档
+```
+
+## 致谢
+
+- [notifwd](https://github.com/jrmann100/notifwd) by Jordan Mann — 原始 macOS 通知转发工具
+
+## License
+
+基于原项目 MIT License。
