@@ -213,7 +213,10 @@ notifwd by Jordan Mann (DingTalk edition). Starting up... """, end="")
                     if subkey == "subt":
                         this.subtitle = subvalue or ""
                     if subkey == "body":
-                        this.body = subvalue or ""
+                        raw = subvalue or ""
+                        if isinstance(raw, list):
+                            raw = "\n".join(str(x) for x in raw)
+                        this.body = raw
         # Merge subtitle and body — notifications have three lines.
         this.text = this.subtitle + ("\u2014" if this.subtitle else "") + this.body
         return this
